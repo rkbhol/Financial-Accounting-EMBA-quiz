@@ -18,7 +18,8 @@ import {
   ArrowLeft,
   Flag,
   ListChecks,
-  Search
+  Search,
+  LayoutGrid
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { clsx, type ClassValue } from 'clsx';
@@ -30,18 +31,80 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const CHAPTER_GROUPS = [
+  {
+    label: 'Core Chapters',
+    items: [
+      { id: 'Chapter 1', title: 'Chapter 1', desc: 'Economic Environment' },
+      { id: 'Chapter 2', title: 'Chapter 2', desc: 'Business Events' },
+      { id: 'Chapter 3', title: 'Chapter 3', desc: 'Cash Flow & Net Income' },
+      { id: 'Chapter 4', title: 'Chapter 4', desc: 'Investing & Credit Decisions' },
+      { id: 'Chapter 5', title: 'Chapter 5', desc: 'Revenue & Receivables' },
+      { id: 'Chapter 6', title: 'Chapter 6', desc: 'Inventory & Payables' },
+      { id: 'Chapter 7', title: 'Chapter 7', desc: 'Long-Lived Assets' },
+      { id: 'Chapter 8', title: 'Chapter 8', desc: 'Investing in Entities' },
+      { id: 'Chapter 9', title: 'Chapter 9', desc: 'Debt Financing' },
+      { id: 'Chapter 10', title: 'Chapter 10', desc: 'Liabilities & Taxes' },
+      { id: 'Chapter 11', title: 'Chapter 11', desc: 'Equity Financing' },
+      { id: 'Chapter 12', title: 'Chapter 12', desc: 'Equity Valuation' },
+    ]
+  },
+  {
+    label: 'Appendices',
+    items: [
+      { id: 'Appendix A', title: 'Appendix A', desc: 'Time Value of Money' },
+      { id: 'Appendix B', title: 'Appendix B', desc: 'Ratios & Metrics' },
+      { id: 'Appendix C', title: 'Appendix C', desc: 'IFRS Illustrated' },
+      { id: 'Appendix D', title: 'Appendix D', desc: 'Accounting Mechanics' },
+      { id: 'Appendix E', title: 'Appendix E', desc: 'Working Capital' },
+      { id: 'Appendix F', title: 'Appendix F', desc: 'Data Analytics' }
+    ]
+  }
+];
+
 export default function App() {
   const [status, setStatus] = useState<QuizStatus>('idle');
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [questionCount, setQuestionCount] = useState<number>(25);
   const [selectedChapters, setSelectedChapters] = useState<Chapter[]>(['Chapter 1', 'Chapter 2', 'Chapter 3', 'Appendix D']);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showNavigator, setShowNavigator] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (status !== 'active') return;
+      
+      const key = e.key.toLowerCase();
+      
+      // Options 1-4
+      if (['1', '2', '3', '4'].includes(key)) {
+        handleSelect(parseInt(key) - 1);
+      }
+      
+      // Navigation
+      if (key === 'arrowright' || key === 'enter') {
+        nextQuestion();
+      }
+      if (key === 'arrowleft') {
+        prevQuestion();
+      }
+      
+      // Flagging
+      if (key === 'f') {
+        toggleFlag(questions[currentIndex].id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [status, currentIndex, questions, answers]);
 
   const startQuiz = async () => {
     if (selectedChapters.length === 0) {
@@ -119,10 +182,30 @@ export default function App() {
               <BookOpen size={18} />
             </div>
             <h1 className="font-semibold tracking-tight text-lg">Accounting Master</h1>
+            {status !== 'idle' && (
+              <button 
+                onClick={() => setStatus('idle')}
+                className="ml-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-emerald-600 transition-colors"
+              >
+                New Quiz
+              </button>
+            )}
           </div>
           {status === 'active' && (
-            <div className="text-xs font-mono text-muted-foreground bg-black/5 px-2 py-1 rounded">
-              {currentIndex + 1} / {questions.length}
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowNavigator(!showNavigator)}
+                className="group flex items-center gap-2 text-xs font-mono text-muted-foreground bg-black/5 hover:bg-black/10 px-3 py-1.5 rounded-full transition-all"
+              >
+                <LayoutGrid size={14} className={cn("transition-transform", showNavigator && "rotate-90")} />
+                <span>{currentIndex + 1} / {questions.length}</span>
+              </button>
+              <button 
+                onClick={() => setStatus('review')}
+                className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-700 px-2 py-1"
+              >
+                Review
+              </button>
             </div>
           )}
         </div>
@@ -130,15 +213,62 @@ export default function App() {
 
       <main className="max-w-3xl mx-auto px-6 py-12">
         <AnimatePresence mode="wait">
+          {status === 'active' && showNavigator && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-white border-b border-black/5 overflow-hidden"
+            >
+              <div className="max-w-3xl mx-auto px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Jump to Question</h4>
+                  <button onClick={() => setShowNavigator(false)} className="text-muted-foreground hover:text-black">
+                    <XCircle size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5">
+                  {questions.map((q, i) => {
+                    const isAnswered = answers[q.id] !== undefined;
+                    const isFlagged = flaggedIds.has(q.id);
+                    const isCurrent = currentIndex === i;
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => {
+                          setCurrentIndex(i);
+                          setShowNavigator(false);
+                        }}
+                        className={cn(
+                          "h-8 rounded-lg text-xs font-medium transition-all border flex items-center justify-center relative",
+                          isCurrent ? "bg-emerald-600 border-emerald-600 text-white shadow-sm scale-110 z-10" :
+                          isAnswered ? "bg-emerald-50 border-emerald-100 text-emerald-700" :
+                          "bg-white border-black/5 text-muted-foreground hover:border-emerald-200"
+                        )}
+                      >
+                        {i + 1}
+                        {isFlagged && (
+                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border border-white" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
           {status === 'idle' && (
             <motion.div
               key="idle"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-8 text-center"
+              className="space-y-12 max-w-5xl mx-auto"
             >
-              <div className="space-y-4">
+              <div className="space-y-4 text-center">
                 <h2 className="text-4xl font-light tracking-tight sm:text-5xl">
                   Master Financial Accounting
                 </h2>
@@ -147,174 +277,232 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="space-y-8 max-w-2xl mx-auto">
-                <div className="space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Select Content</div>
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-                        <input
-                          type="text"
-                          placeholder="Search chapters..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2 bg-white border border-black/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                        />
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr,320px] gap-12">
+                {/* Left Column: Chapter Selection */}
+                <div className="space-y-8 text-left">
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Select Content</div>
+                        {selectedChapters.length > 0 && (
+                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {selectedChapters.length} Selected
+                          </span>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setSelectedChapters(['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8', 'Chapter 9', 'Chapter 10', 'Chapter 11', 'Chapter 12', 'Appendix A', 'Appendix B', 'Appendix C', 'Appendix D', 'Appendix E', 'Appendix F'])}
-                          className="px-3 py-1.5 text-xs bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors font-medium border border-emerald-100"
-                        >
-                          All
-                        </button>
-                        <button 
-                          onClick={() => setSelectedChapters([])}
-                          className="px-3 py-1.5 text-xs bg-black/5 text-muted-foreground rounded-lg hover:bg-black/10 transition-colors font-medium border border-transparent"
-                        >
-                          None
-                        </button>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1 sm:w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+                          <input
+                            type="text"
+                            placeholder="Search chapters..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-black/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                          />
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => setShowSelectedOnly(!showSelectedOnly)}
+                            className={cn(
+                              "px-3 py-1.5 text-xs rounded-lg transition-all font-medium border",
+                              showSelectedOnly 
+                                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
+                                : "bg-white border-black/5 text-muted-foreground hover:bg-black/5"
+                            )}
+                            title="Show selected only"
+                          >
+                            <ListChecks size={14} />
+                          </button>
+                          <button 
+                            onClick={() => setSelectedChapters(['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8', 'Chapter 9', 'Chapter 10', 'Chapter 11', 'Chapter 12', 'Appendix A', 'Appendix B', 'Appendix C', 'Appendix D', 'Appendix E', 'Appendix F'])}
+                            className="px-3 py-1.5 text-xs bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors font-medium border border-emerald-100"
+                          >
+                            All
+                          </button>
+                          <button 
+                            onClick={() => setSelectedChapters([])}
+                            className="px-3 py-1.5 text-xs bg-black/5 text-muted-foreground rounded-lg hover:bg-black/10 transition-colors font-medium border border-transparent"
+                          >
+                            None
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-8">
-                    {[
-                      {
-                        label: 'Core Chapters',
-                        items: [
-                          { id: 'Chapter 1', title: 'Chapter 1', desc: 'Economic Environment' },
-                          { id: 'Chapter 2', title: 'Chapter 2', desc: 'Business Events' },
-                          { id: 'Chapter 3', title: 'Chapter 3', desc: 'Cash Flow & Net Income' },
-                          { id: 'Chapter 4', title: 'Chapter 4', desc: 'Investing & Credit Decisions' },
-                          { id: 'Chapter 5', title: 'Chapter 5', desc: 'Revenue & Receivables' },
-                          { id: 'Chapter 6', title: 'Chapter 6', desc: 'Inventory & Payables' },
-                          { id: 'Chapter 7', title: 'Chapter 7', desc: 'Long-Lived Assets' },
-                          { id: 'Chapter 8', title: 'Chapter 8', desc: 'Investing in Entities' },
-                          { id: 'Chapter 9', title: 'Chapter 9', desc: 'Debt Financing' },
-                          { id: 'Chapter 10', title: 'Chapter 10', desc: 'Liabilities & Taxes' },
-                          { id: 'Chapter 11', title: 'Chapter 11', desc: 'Equity Financing' },
-                          { id: 'Chapter 12', title: 'Chapter 12', desc: 'Equity Valuation' },
-                        ]
-                      },
-                      {
-                        label: 'Appendices',
-                        items: [
-                          { id: 'Appendix A', title: 'Appendix A', desc: 'Time Value of Money' },
-                          { id: 'Appendix B', title: 'Appendix B', desc: 'Ratios & Metrics' },
-                          { id: 'Appendix C', title: 'Appendix C', desc: 'IFRS Illustrated' },
-                          { id: 'Appendix D', title: 'Appendix D', desc: 'Accounting Mechanics' },
-                          { id: 'Appendix E', title: 'Appendix E', desc: 'Working Capital' },
-                          { id: 'Appendix F', title: 'Appendix F', desc: 'Data Analytics' }
-                        ]
-                      }
-                    ].map((group) => {
-                      const filteredItems = group.items.filter(item => 
-                        item.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        item.desc.toLowerCase().includes(searchTerm.toLowerCase())
-                      );
+                    {selectedChapters.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 py-2">
+                        {selectedChapters.map(chapter => (
+                          <button
+                            key={chapter}
+                            onClick={() => toggleChapter(chapter)}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[10px] font-medium hover:bg-emerald-100 transition-colors"
+                          >
+                            {chapter}
+                            <XCircle size={10} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
-                      if (filteredItems.length === 0) return null;
+                    <div className="space-y-8">
+                      {CHAPTER_GROUPS.map((group) => {
+                        const filteredItems = group.items.filter(item => {
+                          const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                             item.desc.toLowerCase().includes(searchTerm.toLowerCase());
+                          const isSelected = selectedChapters.includes(item.id as Chapter);
+                          
+                          if (showSelectedOnly) return matchesSearch && isSelected;
+                          return matchesSearch;
+                        });
 
-                      return (
-                        <div key={group.label} className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{group.label}</h3>
-                            <div className="h-px flex-1 bg-black/5" />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {filteredItems.map((item) => {
-                              const isSelected = selectedChapters.includes(item.id as Chapter);
-                              return (
-                                <button
-                                  key={item.id}
-                                  onClick={() => toggleChapter(item.id as Chapter)}
-                                  className={cn(
-                                    "p-3 rounded-xl border text-left transition-all flex items-center justify-between group relative overflow-hidden",
-                                    isSelected 
-                                      ? "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-sm" 
-                                      : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/30"
-                                  )}
+                        if (filteredItems.length === 0) return null;
+
+                        return (
+                          <div key={group.label} className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{group.label}</h3>
+                                <span className="text-[10px] text-muted-foreground/50">({filteredItems.length})</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => {
+                                    const groupIds = group.items.map(i => i.id as Chapter);
+                                    setSelectedChapters(prev => Array.from(new Set([...prev, ...groupIds])));
+                                  }}
+                                  className="text-[10px] font-bold text-emerald-600 hover:underline"
                                 >
-                                  <div className="relative z-10">
-                                    <div className={cn("text-[10px] font-mono mb-0.5", isSelected ? "text-emerald-600" : "text-muted-foreground")}>
-                                      {item.title}
-                                    </div>
-                                    <div className="text-sm font-medium leading-tight">{item.desc}</div>
-                                  </div>
-                                  <div className={cn(
-                                    "w-4 h-4 rounded border flex items-center justify-center transition-colors relative z-10 shrink-0 ml-2",
-                                    isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-black/10 group-hover:border-emerald-300"
-                                  )}>
-                                    {isSelected && <CheckCircle2 size={10} />}
-                                  </div>
+                                  Select Group
                                 </button>
-                              );
-                            })}
+                                <button 
+                                  onClick={() => {
+                                    const groupIds = group.items.map(i => i.id as Chapter);
+                                    setSelectedChapters(prev => prev.filter(id => !groupIds.includes(id)));
+                                  }}
+                                  className="text-[10px] font-bold text-muted-foreground hover:text-red-500 transition-colors"
+                                >
+                                  Clear
+                                </button>
+                                <div className="h-px w-12 bg-black/5" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {filteredItems.map((item) => {
+                                const isSelected = selectedChapters.includes(item.id as Chapter);
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => toggleChapter(item.id as Chapter)}
+                                    className={cn(
+                                      "p-3 rounded-xl border text-left transition-all flex items-center justify-between group relative overflow-hidden",
+                                      isSelected 
+                                        ? "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-sm" 
+                                        : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/30"
+                                    )}
+                                  >
+                                    <div className="relative z-10">
+                                      <div className={cn("text-[10px] font-mono mb-0.5", isSelected ? "text-emerald-600" : "text-muted-foreground")}>
+                                        {item.title}
+                                      </div>
+                                      <div className="text-sm font-medium leading-tight">{item.desc}</div>
+                                    </div>
+                                    <div className={cn(
+                                      "w-4 h-4 rounded border flex items-center justify-center transition-colors relative z-10 shrink-0 ml-2",
+                                      isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-black/10 group-hover:border-emerald-300"
+                                    )}>
+                                      {isSelected && <CheckCircle2 size={10} />}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
+                        );
+                      })}
+
+                      {searchTerm && !showSelectedOnly && !CHAPTER_GROUPS.some(group => 
+                        group.items.some(item => 
+                          item.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          item.desc.toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                      ) && (
+                        <div className="py-12 text-center space-y-2">
+                          <div className="text-muted-foreground/20 flex justify-center">
+                            <Search size={48} />
+                          </div>
+                          <p className="text-muted-foreground font-medium">No chapters match your search.</p>
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <div className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Difficulty</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(['Easy', 'Medium', 'Hard', 'Mixed'] as Difficulty[]).map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => setDifficulty(level)}
-                          className={cn(
-                            "px-4 py-2 rounded-xl text-sm font-medium border transition-all",
-                            difficulty === level 
-                              ? "bg-emerald-600 border-emerald-600 text-white shadow-md" 
-                              : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/50"
-                          )}
-                        >
-                          {level}
-                        </button>
-                      ))}
+                {/* Right Column: Settings Card */}
+                <div className="space-y-8">
+                  <div className="bg-white p-6 rounded-3xl border border-black/5 shadow-sm space-y-8 sticky top-24 text-left">
+                    <div className="space-y-4">
+                      <div className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Difficulty</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['Easy', 'Medium', 'Hard', 'Mixed'] as Difficulty[]).map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => setDifficulty(level)}
+                            className={cn(
+                              "px-4 py-2 rounded-xl text-sm font-medium border transition-all",
+                              difficulty === level 
+                                ? "bg-emerald-600 border-emerald-600 text-white shadow-md" 
+                                : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/50"
+                            )}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    <div className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Number of Questions</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[5, 10, 25, 50].map((count) => (
-                        <button
-                          key={count}
-                          onClick={() => setQuestionCount(count)}
-                          className={cn(
-                            "px-4 py-2 rounded-xl text-sm font-medium border transition-all",
-                            questionCount === count 
-                              ? "bg-emerald-600 border-emerald-600 text-white shadow-md" 
-                              : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/50"
-                          )}
-                        >
-                          {count} Questions
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      <div className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Question Count</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[5, 10, 25, 50].map((count) => (
+                          <button
+                            key={count}
+                            onClick={() => setQuestionCount(count)}
+                            className={cn(
+                              "px-4 py-2 rounded-xl text-sm font-medium border transition-all",
+                              questionCount === count 
+                                ? "bg-emerald-600 border-emerald-600 text-white shadow-md" 
+                                : "bg-white border-black/5 text-muted-foreground hover:border-emerald-200 hover:bg-emerald-50/50"
+                            )}
+                          >
+                            {count} Qs
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 space-y-4">
+                      <button
+                        onClick={startQuiz}
+                        className="w-full group relative inline-flex items-center justify-center gap-2 bg-[#1a1a1a] text-white px-8 py-4 rounded-full font-medium transition-all hover:bg-emerald-600 shadow-lg active:scale-95"
+                      >
+                        Start Session
+                        <ChevronRight size={20} className="transition-transform group-hover:translate-x-1" />
+                      </button>
+
+                      {error && (
+                        <p className="text-red-500 text-xs bg-red-50 p-3 rounded-xl border border-red-100">
+                          {error}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-[10px] text-muted-foreground text-center leading-relaxed">
+                      AI will generate {questionCount} questions based on your selection.
                     </div>
                   </div>
                 </div>
               </div>
-
-              <button
-                onClick={startQuiz}
-                className="group relative inline-flex items-center gap-2 bg-[#1a1a1a] text-white px-8 py-4 rounded-full font-medium transition-all hover:bg-emerald-600 hover:scale-105 active:scale-95 shadow-lg"
-              >
-                Start Practice Session
-                <ChevronRight size={20} className="transition-transform group-hover:translate-x-1" />
-              </button>
-
-              {error && (
-                <p className="text-red-500 text-sm bg-red-50 p-3 rounded-xl border border-red-100">
-                  {error}
-                </p>
-              )}
             </motion.div>
           )}
 
@@ -403,16 +591,16 @@ export default function App() {
               </div>
 
               <div className="space-y-6">
-                <div className="space-y-2">
-                  <span className="text-xs font-mono uppercase tracking-widest text-emerald-600">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-600 font-bold">
                     {questions[currentIndex].chapter}
                   </span>
-                  <h3 className="text-2xl font-medium leading-tight">
+                  <h3 className="text-lg sm:text-xl font-medium leading-snug">
                     {questions[currentIndex].text}
                   </h3>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="grid gap-2">
                   {questions[currentIndex].options.map((option, idx) => {
                     const isSelected = answers[questions[currentIndex].id] === idx;
                     return (
@@ -420,18 +608,26 @@ export default function App() {
                         key={idx}
                         onClick={() => handleSelect(idx)}
                         className={cn(
-                          "w-full text-left p-5 rounded-2xl border transition-all flex items-center justify-between group",
+                          "w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group relative",
                           isSelected 
                             ? "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-sm" 
                             : "bg-white border-black/5 hover:border-emerald-200 hover:bg-emerald-50/30"
                         )}
                       >
-                        <span className="flex-1">{option}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            "w-6 h-6 rounded-lg border flex items-center justify-center text-[10px] font-bold transition-colors",
+                            isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "bg-black/5 border-transparent text-muted-foreground"
+                          )}>
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm sm:text-base">{option}</span>
+                        </div>
                         <div className={cn(
-                          "w-6 h-6 rounded-full border flex items-center justify-center transition-colors",
+                          "w-5 h-5 rounded-full border flex items-center justify-center transition-colors",
                           isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-black/10 group-hover:border-emerald-300"
                         )}>
-                          {isSelected && <CheckCircle2 size={14} />}
+                          {isSelected && <CheckCircle2 size={12} />}
                         </div>
                       </button>
                     );
@@ -439,7 +635,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-6 border-t border-black/5">
+              <div className="flex items-center justify-between pt-4 border-t border-black/5">
                 <button
                   onClick={prevQuestion}
                   disabled={currentIndex === 0}
@@ -447,10 +643,15 @@ export default function App() {
                 >
                   <ArrowLeft size={16} /> Previous
                 </button>
+
+                <div className="hidden sm:flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+                  <span className="px-1.5 py-0.5 rounded border border-black/10 bg-white">1-4</span> Select
+                  <span className="px-1.5 py-0.5 rounded border border-black/10 bg-white ml-2">Enter</span> Next
+                </div>
                 
                 <button
                   onClick={nextQuestion}
-                  className="flex items-center gap-2 bg-[#1a1a1a] text-white px-6 py-3 rounded-full font-medium transition-all hover:bg-emerald-600"
+                  className="flex items-center gap-2 bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full font-medium transition-all hover:bg-emerald-600 shadow-md active:scale-95"
                 >
                   {currentIndex === questions.length - 1 ? 'Review Summary' : 'Next Question'}
                   <ArrowRight size={16} />
@@ -560,11 +761,47 @@ export default function App() {
                 
                 <div className="flex justify-center gap-4">
                   <button
-                    onClick={startQuiz}
+                    onClick={() => setStatus('idle')}
                     className="flex items-center gap-2 bg-[#1a1a1a] text-white px-6 py-3 rounded-full font-medium transition-all hover:bg-emerald-600"
                   >
-                    <RotateCcw size={18} /> Try Again
+                    <RotateCcw size={18} /> New Session
                   </button>
+                </div>
+              </div>
+
+              {/* Chapter Breakdown */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-medium border-b border-black/5 pb-4">Performance by Chapter</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Array.from(new Set(questions.map(q => q.chapter))).map(chapter => {
+                    const chapterQuestions = questions.filter(q => q.chapter === chapter);
+                    const chapterCorrect = chapterQuestions.filter(q => answers[q.id] === q.correctIndex).length;
+                    const percentage = Math.round((chapterCorrect / chapterQuestions.length) * 100);
+                    
+                    return (
+                      <div key={chapter} className="bg-white p-4 rounded-2xl border border-black/5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{chapter}</span>
+                          <span className={cn(
+                            "text-sm font-bold",
+                            percentage >= 80 ? "text-emerald-600" : percentage >= 50 ? "text-amber-600" : "text-red-600"
+                          )}>{percentage}%</span>
+                        </div>
+                        <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all duration-1000",
+                              percentage >= 80 ? "bg-emerald-600" : percentage >= 50 ? "bg-amber-600" : "bg-red-600"
+                            )}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {chapterCorrect} / {chapterQuestions.length} correct
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
