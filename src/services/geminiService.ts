@@ -41,71 +41,73 @@ Additional Chapter 3 Context (Measuring Performance: Cash Flow and Net Income):
 export async function generateAccountingQuestions(
   difficulty: Difficulty = 'Medium', 
   count: number = 25,
-  selectedChapters: Chapter[] = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Appendix D']
+  selectedChapters: Chapter[] = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Appendix D'],
+  onProgress?: (progress: number) => void
 ): Promise<Question[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
   
+  // Batch size for parallel generation
+  const BATCH_SIZE = 5;
+  const numBatches = Math.ceil(count / BATCH_SIZE);
   const chaptersText = selectedChapters.join(", ");
   
-  const prompt = `
-    You are an expert Financial Accounting Professor. 
-    Your task is to generate ${count} unique, ${difficulty}-difficulty multiple-choice questions for a quiz.
-    The questions must be based ONLY on the following chapters of 'Financial Accounting for Executives and MBA, 6e' by Simco, Comprix, Wallace: ${chaptersText}.
-    
-    CRITICAL: You MUST generate questions for EVERY selected chapter.
-    
-    Full Chapter/Appendix Reference (for context):
-    - Chapter 1: The Economic Environment of Accounting Information (Financial Statements).
-    - Chapter 2: From Business Events to Financial Statements (Accounting Cycle, Journal Entries).
-    - Chapter 3: Measuring Performance: Cash Flow and Net Income (Operating, Investing, Financing activities; Indirect Method).
-    - Chapter 4: Using Financial Statements for Investing and Credit Decisions.
-    - Chapter 5: Operating Cycle, Revenue Recognition, and Receivable Valuation.
-    - Chapter 6: Operating Expenses, Inventory Valuation, and Accounts Payable.
-    - Chapter 7: Long-Lived Fixed Assets, Intangible Assets, and Natural Resources.
-    - Chapter 8: Investing in Other Entities.
-    - Chapter 9: Debt Financing: Bonds, Notes, and Leases.
-    - Chapter 10: Commitments and Contingent Liabilities, Deferred Tax Liabilities, and Retirement Obligations.
-    - Chapter 11: Equity Financing and Shareholders’ Equity.
-    - Chapter 12: Using Accounting Information in Equity Valuation.
-    - Appendix A: The Time Value of Money.
-    - Appendix B: Financial Statement Ratios and Metrics.
-    - Appendix C: IFRS Illustrated: LVMH Moët Hennessey-Louis Vuitton.
-    - Appendix D: Accounting Mechanics: T-Accounts and Journal Entries.
-    - Appendix E: Working Capital Management.
-    - Appendix F: Data Analytics and Visualizations.
-    
-    Difficulty Context:
-    - Easy: Focus on basic definitions, simple A=L+E classifications, and straightforward journal entries.
-    - Medium: Mix of conceptual understanding and multi-step calculations (like calculating net income from a list of accounts).
-    - Hard: Complex scenarios, subtle accounting principle applications, and tricky multi-part calculations requiring deep integration of concepts.
-    - Mixed: A balanced distribution of Easy, Medium, and Hard questions.
-    
-    Use the following sample test context to understand the style, terminology, and depth required:
-    ${SAMPLE_TEST_CONTEXT}
-    
-    Requirements:
-    1. Generate exactly ${count} questions.
-    2. Distribute the questions fairly across the selected chapters: ${chaptersText}. If only one chapter is selected, all questions must be from that chapter.
-    3. Each question must have 4 options.
-    4. Provide the correct answer index (0-3).
-    5. Provide a detailed pedagogical explanation for each question. The explanation should clarify why the correct answer is right and why the other options are incorrect or represent common accounting misconceptions.
-    6. Cover topics like: Financial Statement elements (A=L+E), Journal Entries, Accrual vs Cash basis, Revenue Recognition, Matching Principle, Temporary vs Permanent accounts, Cash Flow classifications (Operating, Investing, Financing), and the Indirect Method for cash flows.
-    7. Ensure a mix of conceptual and calculation-based questions.
-    
-    Return the data as a JSON array of objects matching this structure:
-    {
-      "id": string (unique),
-      "text": string,
-      "options": string[],
-      "correctIndex": number,
-      "explanation": string,
-      "chapter": string (MUST be one of: "Chapter 1", "Chapter 2", "Chapter 3", or "Appendix D")
-    }
-  `;
+  const generateBatch = async (batchCount: number, batchIndex: number) => {
+    const prompt = `
+      You are an expert Financial Accounting Professor. 
+      Your task is to generate ${batchCount} unique, ${difficulty}-difficulty multiple-choice questions for a quiz.
+      This is batch ${batchIndex + 1} of ${numBatches}.
+      The questions must be based ONLY on the following chapters of 'Financial Accounting for Executives and MBA, 6e' by Simco, Comprix, Wallace: ${chaptersText}.
+      
+      CRITICAL: You MUST generate questions for the selected chapters.
+      
+      Full Chapter/Appendix Reference (for context):
+      - Chapter 1: The Economic Environment of Accounting Information (Financial Statements).
+      - Chapter 2: From Business Events to Financial Statements (Accounting Cycle, Journal Entries).
+      - Chapter 3: Measuring Performance: Cash Flow and Net Income (Operating, Investing, Financing activities; Indirect Method).
+      - Chapter 4: Using Financial Statements for Investing and Credit Decisions.
+      - Chapter 5: Operating Cycle, Revenue Recognition, and Receivable Valuation.
+      - Chapter 6: Operating Expenses, Inventory Valuation, and Accounts Payable.
+      - Chapter 7: Long-Lived Fixed Assets, Intangible Assets, and Natural Resources.
+      - Chapter 8: Investing in Other Entities.
+      - Chapter 9: Debt Financing: Bonds, Notes, and Leases.
+      - Chapter 10: Commitments and Contingent Liabilities, Deferred Tax Liabilities, and Retirement Obligations.
+      - Chapter 11: Equity Financing and Shareholders’ Equity.
+      - Chapter 12: Using Accounting Information in Equity Valuation.
+      - Appendix A: The Time Value of Money.
+      - Appendix B: Financial Statement Ratios and Metrics.
+      - Appendix C: IFRS Illustrated: LVMH Moët Hennessey-Louis Vuitton.
+      - Appendix D: Accounting Mechanics: T-Accounts and Journal Entries.
+      - Appendix E: Working Capital Management.
+      - Appendix F: Data Analytics and Visualizations.
+      
+      Difficulty Context:
+      - Easy: Focus on basic definitions, simple A=L+E classifications, and straightforward journal entries.
+      - Medium: Mix of conceptual understanding and multi-step calculations.
+      - Hard: Complex scenarios, subtle accounting principle applications, and multi-part calculations.
+      - Mixed: A balanced distribution of Easy, Medium, and Hard questions.
+      
+      Use the following sample test context for style and terminology:
+      ${SAMPLE_TEST_CONTEXT}
+      
+      Requirements:
+      1. Generate exactly ${batchCount} questions.
+      2. Distribute the questions across the selected chapters: ${chaptersText}.
+      3. Each question must have 4 options.
+      4. Provide the correct answer index (0-3).
+      5. Provide a detailed pedagogical explanation for each question.
+      6. Return the data as a JSON array of objects matching this structure:
+      {
+        "id": string (unique, use prefix 'q-${batchIndex}-'),
+        "text": string,
+        "options": string[],
+        "correctIndex": number,
+        "explanation": string,
+        "chapter": string (Must be one of the selected chapters)
+      }
+    `;
 
-  try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
@@ -114,8 +116,27 @@ export async function generateAccountingQuestions(
 
     const text = response.text;
     if (!text) throw new Error("No response from Gemini");
-    
-    return JSON.parse(text);
+    return JSON.parse(text) as Question[];
+  };
+
+  try {
+    const batches = [];
+    let remaining = count;
+    for (let i = 0; i < numBatches; i++) {
+      const batchCount = Math.min(BATCH_SIZE, remaining);
+      batches.push(generateBatch(batchCount, i));
+      remaining -= batchCount;
+    }
+
+    let completedBatches = 0;
+    const results = await Promise.all(batches.map(async (p) => {
+      const res = await p;
+      completedBatches++;
+      if (onProgress) onProgress((completedBatches / numBatches) * 100);
+      return res;
+    }));
+
+    return results.flat();
   } catch (error) {
     console.error("Error generating questions:", error);
     throw error;

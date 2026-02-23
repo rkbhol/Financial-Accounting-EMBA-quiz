@@ -36,6 +36,7 @@ export default function App() {
   const [questionCount, setQuestionCount] = useState<number>(25);
   const [selectedChapters, setSelectedChapters] = useState<Chapter[]>(['Chapter 1', 'Chapter 2', 'Chapter 3', 'Appendix D']);
   const [searchTerm, setSearchTerm] = useState('');
+  const [progress, setProgress] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -49,8 +50,9 @@ export default function App() {
     }
     setError(null);
     setStatus('loading');
+    setProgress(0);
     try {
-      const data = await generateAccountingQuestions(difficulty, questionCount, selectedChapters);
+      const data = await generateAccountingQuestions(difficulty, questionCount, selectedChapters, (p) => setProgress(p));
       setQuestions(data);
       setCurrentIndex(0);
       setAnswers({});
@@ -322,17 +324,49 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-20 space-y-6"
+              className="flex flex-col items-center justify-center py-24 space-y-8"
             >
-              <div className="relative">
-                <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-2 h-2 bg-emerald-600 rounded-full" />
+              <div className="relative w-32 h-32">
+                <svg className="w-full h-full" viewBox="0 0 100 100">
+                  <circle
+                    className="text-black/5 stroke-current"
+                    strokeWidth="8"
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                  ></circle>
+                  <motion.circle
+                    className="text-emerald-600 stroke-current"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    initial={{ strokeDasharray: "251.2", strokeDashoffset: "251.2" }}
+                    animate={{ strokeDashoffset: 251.2 - (251.2 * progress) / 100 }}
+                    transition={{ duration: 0.5 }}
+                  ></motion.circle>
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <span className="text-2xl font-bold text-emerald-700">{Math.round(progress)}%</span>
+                  <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
                 </div>
               </div>
               <div className="text-center space-y-2">
-                <h3 className="font-medium text-xl">Generating your quiz...</h3>
-                <p className="text-muted-foreground">Gemini is crafting {questionCount} unique accounting challenges.</p>
+                <h3 className="text-2xl font-light tracking-tight">Generating Your Quiz</h3>
+                <p className="text-muted-foreground max-w-xs mx-auto">
+                  Our AI professor is crafting {questionCount} unique questions across {selectedChapters.length} chapters...
+                </p>
+              </div>
+              <div className="w-full max-w-xs h-1.5 bg-black/5 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-emerald-600"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.3 }}
+                />
               </div>
             </motion.div>
           )}
